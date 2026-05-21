@@ -118,14 +118,111 @@ function renderInline(value: string, pagesBySlug: Map<string, WikiPage>) {
       const preview = page
         ? excerptFromMarkdown(page.markdown)
         : `${title} has not been written yet.`;
+      const appleMusicPreview = page ? findAppleMusicEmbedSrc(page.markdown) : null;
+      const youtubePreview = page ? findYoutubeEmbedSrc(page.markdown) : null;
+      const appleMusicAttribute = appleMusicPreview
+        ? ` data-preview-apple-music="${escapeHtml(appleMusicPreview)}"`
+        : "";
+      const youtubeAttribute = youtubePreview
+        ? ` data-preview-youtube="${escapeHtml(youtubePreview)}"`
+        : "";
 
-      return `<a class="wiki-link" href="/${slug}" data-preview-title="${escapeHtml(title)}" data-preview="${escapeHtml(preview)}">${escapeHtml(title)}</a>`;
+      return `<a class="wiki-link" href="/${slug}" data-preview-title="${escapeHtml(title)}" data-preview="${escapeHtml(preview)}"${appleMusicAttribute}${youtubeAttribute}>${escapeHtml(title)}</a>`;
     });
+}
+
+function appleMusicEmbedSrc(value: string) {
+  const match = value.match(/^\{\{apple-music\s+(.+?)\s*\}\}$/);
+  if (!match) return null;
+
+  try {
+    const url = new URL(match[1]);
+    if (!["music.apple.com", "embed.music.apple.com"].includes(url.hostname)) {
+      return null;
+    }
+
+    url.hostname = "embed.music.apple.com";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function findAppleMusicEmbedSrc(markdown: string) {
+  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
+    const embedSrc = appleMusicEmbedSrc(line.trim());
+    if (embedSrc) return embedSrc;
+  }
+
+  return null;
+}
+
+function renderAppleMusicEmbed(value: string) {
+  const embedSrc = appleMusicEmbedSrc(value);
+  if (!embedSrc) return null;
+
+  return `<iframe class="apple-music-embed" allow="autoplay *; encrypted-media *;" frameborder="0" height="175" loading="lazy" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation" src="${escapeHtml(embedSrc)}"></iframe>`;
+}
+
+function youtubeEmbedSrc(value: string) {
+  const match = value.match(/^\{\{youtube\s+(.+?)\s*\}\}$/);
+  if (!match) return null;
+
+  try {
+    const url = new URL(match[1]);
+    const hostname = url.hostname.replace(/^www\./, "");
+    let videoId: string | null = null;
+
+    if (hostname === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] || null;
+    }
+
+    if (hostname === "youtube.com" || hostname === "m.youtube.com" || hostname === "youtube-nocookie.com") {
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      if (url.pathname === "/watch") {
+        videoId = url.searchParams.get("v");
+      } else if (pathParts[0] === "embed" || pathParts[0] === "shorts" || pathParts[0] === "live") {
+        videoId = pathParts[1] || null;
+      }
+    }
+
+    if (!videoId || !/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) {
+      return null;
+    }
+
+    const embedUrl = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`);
+    const start = url.searchParams.get("start") || url.searchParams.get("t");
+    if (start && /^\d+s?$/.test(start)) {
+      embedUrl.searchParams.set("start", start.replace(/s$/, ""));
+    }
+
+    return embedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function findYoutubeEmbedSrc(markdown: string) {
+  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
+    const embedSrc = youtubeEmbedSrc(line.trim());
+    if (embedSrc) return embedSrc;
+  }
+
+  return null;
+}
+
+function renderYoutubeEmbed(value: string) {
+  const embedSrc = youtubeEmbedSrc(value);
+  if (!embedSrc) return null;
+
+  return `<iframe class="youtube-embed" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen frameborder="0" loading="lazy" sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation" src="${escapeHtml(embedSrc)}"></iframe>`;
 }
 
 export function excerptFromMarkdown(markdown: string) {
   return markdown
     .replace(/^#\s+.+$/gm, "")
+    .replace(/^\{\{apple-music\s+.+?\s*\}\}$/gm, "")
+    .replace(/^\{\{youtube\s+.+?\s*\}\}$/gm, "")
     .replace(/\[\[([^\]]+)\]\]/g, "$1")
     .replace(/[*_`>#-]/g, "")
     .split(/\n+/)
@@ -159,6 +256,20 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
     if (/^---+$/.test(trimmed)) {
       flushParagraph();
       html.push("<hr />");
+      continue;
+    }
+
+    const appleMusicEmbed = renderAppleMusicEmbed(trimmed);
+    if (appleMusicEmbed) {
+      flushParagraph();
+      html.push(appleMusicEmbed);
+      continue;
+    }
+
+    const youtubeEmbed = renderYoutubeEmbed(trimmed);
+    if (youtubeEmbed) {
+      flushParagraph();
+      html.push(youtubeEmbed);
       continue;
     }
 

@@ -14,6 +14,8 @@ const isHomePage = page.slug === "rap";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://embed.music.apple.com" />
+    <link rel="preconnect" href="https://music.apple.com" />
     <title>{page.title}</title>
   </head>
   <body>
@@ -47,9 +49,19 @@ const isHomePage = page.slug === "rap";
       </section>
     </main>
 
-    <div class="preview-card" data-preview-card hidden>
+    <div class="preview-card" data-preview-card>
       <strong data-preview-title></strong>
       <p data-preview-body></p>
+      <div class="preview-apple-music-slot" data-preview-apple-music-slot>
+        <div class="preview-apple-music-loading" data-preview-apple-music-loading hidden>
+          Loading Apple Music...
+        </div>
+      </div>
+      <div class="preview-youtube-slot" data-preview-youtube-slot hidden>
+        <div class="preview-youtube-loading" data-preview-youtube-loading hidden>
+          Loading YouTube...
+        </div>
+      </div>
     </div>
 
     <script define:vars={{ slug: page.slug }}>
@@ -63,8 +75,15 @@ const isHomePage = page.slug === "rap";
       const previewCard = document.querySelector("[data-preview-card]");
       const previewTitle = previewCard.querySelector("[data-preview-title]");
       const previewBody = previewCard.querySelector("[data-preview-body]");
+      const previewAppleMusicSlot = previewCard.querySelector("[data-preview-apple-music-slot]");
+      const previewAppleMusicLoading = previewCard.querySelector("[data-preview-apple-music-loading]");
+      const previewYoutubeSlot = previewCard.querySelector("[data-preview-youtube-slot]");
+      const previewYoutubeLoading = previewCard.querySelector("[data-preview-youtube-loading]");
+      const appleMusicFrames = new Map();
+      const youtubeFrames = new Map();
 
       let editing = false;
+      let previewHideTimer;
 
       backButton.addEventListener("click", () => {
         const referrer = document.referrer ? new URL(document.referrer) : null;
@@ -115,21 +134,196 @@ const isHomePage = page.slug === "rap";
         }
       });
 
+      function hidePreview() {
+        previewCard.classList.remove("is-visible");
+        previewAppleMusicLoading.hidden = true;
+        previewYoutubeLoading.hidden = true;
+        appleMusicFrames.forEach((frame) => parkAppleMusicFrame(frame));
+        youtubeFrames.forEach((frame) => parkYoutubeFrame(frame));
+      }
+
+      function parkAppleMusicFrame(frame) {
+        frame.classList.remove("is-active", "is-loading");
+      }
+
+      function parkYoutubeFrame(frame) {
+        frame.classList.remove("is-active", "is-loading");
+      }
+
+      function scheduleHidePreview() {
+        previewHideTimer = window.setTimeout(hidePreview, 120);
+      }
+
+      function createAppleMusicFrame(src) {
+        const frame = document.createElement("iframe");
+        frame.className = "preview-apple-music";
+        frame.title = "Apple Music preview";
+        frame.allow = "autoplay *; encrypted-media *;";
+        frame.frameBorder = "0";
+        frame.height = "175";
+        frame.loading = "eager";
+        frame.sandbox = "allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation";
+        frame.dataset.loaded = "false";
+        frame.dataset.src = src;
+        frame.addEventListener("mouseenter", () => window.clearTimeout(previewHideTimer));
+        frame.addEventListener("mouseleave", hidePreview);
+        frame.addEventListener("load", () => {
+          frame.dataset.loaded = "true";
+          frame.classList.remove("is-loading");
+          if (frame.classList.contains("is-active")) {
+            previewAppleMusicLoading.hidden = true;
+          }
+        });
+        frame.src = src;
+        return frame;
+      }
+
+      function createYoutubeFrame(src) {
+        const frame = document.createElement("iframe");
+        frame.className = "preview-youtube";
+        frame.title = "YouTube preview";
+        frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+        frame.allowFullscreen = true;
+        frame.frameBorder = "0";
+        frame.loading = "eager";
+        frame.sandbox = "allow-forms allow-popups allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation";
+        frame.dataset.loaded = "false";
+        frame.dataset.src = src;
+        frame.addEventListener("mouseenter", () => window.clearTimeout(previewHideTimer));
+        frame.addEventListener("mouseleave", hidePreview);
+        frame.addEventListener("load", () => {
+          frame.dataset.loaded = "true";
+          frame.classList.remove("is-loading");
+          if (frame.classList.contains("is-active")) {
+            previewYoutubeLoading.hidden = true;
+          }
+        });
+        frame.src = src;
+        return frame;
+      }
+
+      function getAppleMusicFrame(src) {
+        if (!appleMusicFrames.has(src)) {
+          const frame = createAppleMusicFrame(src);
+          appleMusicFrames.set(src, frame);
+          previewAppleMusicSlot.append(frame);
+        }
+
+        return appleMusicFrames.get(src);
+      }
+
+      function getYoutubeFrame(src) {
+        if (!youtubeFrames.has(src)) {
+          const frame = createYoutubeFrame(src);
+          youtubeFrames.set(src, frame);
+          previewYoutubeSlot.append(frame);
+        }
+
+        return youtubeFrames.get(src);
+      }
+
+      function prewarmAppleMusicFrames() {
+        if (!previewCard.classList.contains("is-visible")) {
+          previewAppleMusicSlot.hidden = false;
+        }
+
+        const sources = new Set(
+          Array.from(document.querySelectorAll(".wiki-link"))
+            .map((link) => link.dataset.previewAppleMusic)
+            .filter(Boolean),
+        );
+
+        sources.forEach((src) => getAppleMusicFrame(src));
+      }
+
+      function prewarmYoutubeFrames() {
+        if (!previewCard.classList.contains("is-visible")) {
+          previewYoutubeSlot.hidden = false;
+        }
+
+        const sources = new Set(
+          Array.from(document.querySelectorAll(".wiki-link"))
+            .map((link) => link.dataset.previewYoutube)
+            .filter(Boolean),
+        );
+
+        sources.forEach((src) => getYoutubeFrame(src));
+      }
+
+      function showPreview(link) {
+        window.clearTimeout(previewHideTimer);
+        const appleMusicSrc = link.dataset.previewAppleMusic || "";
+        const youtubeSrc = link.dataset.previewYoutube || "";
+        const hasMediaPreview = Boolean(appleMusicSrc || youtubeSrc);
+
+        previewTitle.textContent = link.dataset.previewTitle || link.textContent;
+        previewBody.textContent = link.dataset.preview || "";
+        previewBody.hidden = hasMediaPreview;
+        previewAppleMusicSlot.hidden = !appleMusicSrc;
+        previewYoutubeSlot.hidden = !youtubeSrc || Boolean(appleMusicSrc);
+        previewCard.classList.toggle("has-apple-music", Boolean(appleMusicSrc));
+        previewCard.classList.toggle("has-youtube", Boolean(!appleMusicSrc && youtubeSrc));
+        previewCard.classList.add("is-visible");
+
+        if (appleMusicSrc) {
+          youtubeFrames.forEach((cachedFrame) => {
+            parkYoutubeFrame(cachedFrame);
+          });
+          const frame = getAppleMusicFrame(appleMusicSrc);
+          const frameLoaded = frame.dataset.loaded === "true";
+          appleMusicFrames.forEach((cachedFrame) => {
+            if (cachedFrame === frame) {
+              cachedFrame.classList.add("is-active");
+            } else {
+              parkAppleMusicFrame(cachedFrame);
+            }
+          });
+          frame.classList.toggle("is-loading", !frameLoaded);
+          previewAppleMusicLoading.hidden = frameLoaded;
+          previewYoutubeLoading.hidden = true;
+        } else if (youtubeSrc) {
+          appleMusicFrames.forEach((cachedFrame) => {
+            parkAppleMusicFrame(cachedFrame);
+          });
+          const frame = getYoutubeFrame(youtubeSrc);
+          const frameLoaded = frame.dataset.loaded === "true";
+          youtubeFrames.forEach((cachedFrame) => {
+            if (cachedFrame === frame) {
+              cachedFrame.classList.add("is-active");
+            } else {
+              parkYoutubeFrame(cachedFrame);
+            }
+          });
+          frame.classList.toggle("is-loading", !frameLoaded);
+          previewYoutubeLoading.hidden = frameLoaded;
+          previewAppleMusicLoading.hidden = true;
+        } else {
+          appleMusicFrames.forEach((cachedFrame) => {
+            parkAppleMusicFrame(cachedFrame);
+          });
+          youtubeFrames.forEach((cachedFrame) => {
+            parkYoutubeFrame(cachedFrame);
+          });
+          previewAppleMusicLoading.hidden = true;
+          previewYoutubeLoading.hidden = true;
+        }
+
+        const rect = link.getBoundingClientRect();
+        const cardWidth = appleMusicSrc || youtubeSrc ? 420 : 320;
+        previewCard.style.left = `${Math.max(16, Math.min(rect.left, window.innerWidth - cardWidth - 16))}px`;
+        previewCard.style.top = `${rect.bottom + window.scrollY + 8}px`;
+      }
+
+      previewCard.addEventListener("mouseenter", () => window.clearTimeout(previewHideTimer));
+      previewCard.addEventListener("mouseleave", hidePreview);
+
       document.querySelectorAll(".wiki-link").forEach((link) => {
-        link.addEventListener("mouseenter", () => {
-          previewTitle.textContent = link.dataset.previewTitle || link.textContent;
-          previewBody.textContent = link.dataset.preview || "";
-          previewCard.hidden = false;
-
-          const rect = link.getBoundingClientRect();
-          previewCard.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`;
-          previewCard.style.top = `${rect.bottom + window.scrollY + 8}px`;
-        });
-
-        link.addEventListener("mouseleave", () => {
-          previewCard.hidden = true;
-        });
+        link.addEventListener("mouseenter", () => showPreview(link));
+        link.addEventListener("mouseleave", scheduleHidePreview);
       });
+
+      prewarmAppleMusicFrames();
+      prewarmYoutubeFrames();
     </script>
   </body>
 </html>
