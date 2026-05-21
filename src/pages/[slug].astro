@@ -1,0 +1,135 @@
+---
+import "../styles/global.css";
+import { readAllPages, readPage, renderMarkdown } from "@/lib/wiki";
+
+const slug = Astro.params.slug || "rap";
+const page = readPage(slug);
+const pages = readAllPages();
+const html = renderMarkdown(page.markdown, pages);
+const isHomePage = page.slug === "rap";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{page.title}</title>
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="toolbar" aria-label="Page actions">
+        <nav class="breadcrumbs" aria-label="Breadcrumbs">
+          <button class="back-button" type="button" data-back-button aria-label="Go back">Back</button>
+          <ol>
+            <li><a href="/rap">Rap</a></li>
+            {!isHomePage && (
+              <>
+                <li aria-hidden="true">/</li>
+                <li aria-current="page">{page.title}</li>
+              </>
+            )}
+          </ol>
+        </nav>
+        <div class="toolbar-actions">
+          <span class="save-status" data-save-status></span>
+          <button class="text-button" type="button" data-edit-toggle>Edit</button>
+          <button class="text-button is-primary" type="button" data-save hidden>Save</button>
+        </div>
+      </section>
+
+      <article class="wiki-page" data-view>
+        <div set:html={html} />
+      </article>
+
+      <section class="editor" data-editor hidden>
+        <textarea aria-label={`Markdown for ${page.title}`} data-markdown>{page.markdown}</textarea>
+      </section>
+    </main>
+
+    <div class="preview-card" data-preview-card hidden>
+      <strong data-preview-title></strong>
+      <p data-preview-body></p>
+    </div>
+
+    <script define:vars={{ slug: page.slug }}>
+      const editToggle = document.querySelector("[data-edit-toggle]");
+      const saveButton = document.querySelector("[data-save]");
+      const saveStatus = document.querySelector("[data-save-status]");
+      const backButton = document.querySelector("[data-back-button]");
+      const view = document.querySelector("[data-view]");
+      const editor = document.querySelector("[data-editor]");
+      const textarea = document.querySelector("[data-markdown]");
+      const previewCard = document.querySelector("[data-preview-card]");
+      const previewTitle = previewCard.querySelector("[data-preview-title]");
+      const previewBody = previewCard.querySelector("[data-preview-body]");
+
+      let editing = false;
+
+      backButton.addEventListener("click", () => {
+        const referrer = document.referrer ? new URL(document.referrer) : null;
+        const cameFromThisSite = referrer?.origin === window.location.origin;
+
+        if (cameFromThisSite && window.history.length > 1) {
+          window.history.back();
+          return;
+        }
+
+        window.location.href = "/rap";
+      });
+
+      function setEditing(nextEditing) {
+        editing = nextEditing;
+        view.hidden = editing;
+        editor.hidden = !editing;
+        saveButton.hidden = !editing;
+        editToggle.textContent = editing ? "Cancel" : "Edit";
+        saveStatus.textContent = "";
+        if (editing) textarea.focus();
+      }
+
+      editToggle.addEventListener("click", () => setEditing(!editing));
+
+      saveButton.addEventListener("click", async () => {
+        saveButton.disabled = true;
+        saveStatus.textContent = "Saving...";
+
+        try {
+          const response = await fetch("/api/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slug, markdown: textarea.value }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+
+          saveStatus.textContent = "Saved";
+          window.location.reload();
+        } catch (error) {
+          saveStatus.textContent = "Could not save";
+          console.error(error);
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
+
+      document.querySelectorAll(".wiki-link").forEach((link) => {
+        link.addEventListener("mouseenter", () => {
+          previewTitle.textContent = link.dataset.previewTitle || link.textContent;
+          previewBody.textContent = link.dataset.preview || "";
+          previewCard.hidden = false;
+
+          const rect = link.getBoundingClientRect();
+          previewCard.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`;
+          previewCard.style.top = `${rect.bottom + window.scrollY + 8}px`;
+        });
+
+        link.addEventListener("mouseleave", () => {
+          previewCard.hidden = true;
+        });
+      });
+    </script>
+  </body>
+</html>

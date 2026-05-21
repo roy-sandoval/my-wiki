@@ -1,0 +1,262 @@
+:root {
+  color: #1f1f1f;
+  background: #ffffff;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Helvetica,
+    Arial,
+    sans-serif;
+  font-size: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.page-shell {
+  width: min(100% - 48px, 760px);
+  margin: 0 auto;
+  padding: 24px 0 80px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 36px;
+  margin-bottom: 72px;
+  color: #787774;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  color: #787774;
+  font-size: 14px;
+  list-style: none;
+}
+
+.breadcrumbs li {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+  color: #37352f;
+  background: #f7f6f3;
+}
+
+.back-button {
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #787774;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  background: #f7f6f3;
+  color: #37352f;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-status {
+  min-width: 76px;
+  color: #787774;
+  font-size: 14px;
+  text-align: right;
+}
+
+.text-button {
+  height: 32px;
+  border: 1px solid #deddda;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #37352f;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  background: #f7f6f3;
+}
+
+.text-button.is-primary {
+  border-color: #37352f;
+  background: #37352f;
+  color: #ffffff;
+}
+
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.wiki-page h1 {
+  margin: 0 0 28px;
+  color: #111111;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.18;
+}
+
+.wiki-page h2,
+.wiki-page h3 {
+  margin: 32px 0 8px;
+  color: #111111;
+  line-height: 1.25;
+}
+
+.wiki-page p {
+  margin: 0 0 14px;
+  color: #2f2f2f;
+  font-size: 17px;
+  line-height: 1.68;
+}
+
+.wiki-page strong {
+  color: #111111;
+  font-weight: 700;
+}
+
+.wiki-page hr {
+  border: 0;
+  border-top: 1px solid #eeeeec;
+  margin: 24px 0;
+}
+
+.wiki-page blockquote {
+  margin: 18px 0;
+  padding-left: 14px;
+  border-left: 3px solid #deddda;
+  color: #545454;
+}
+
+.wiki-link {
+  color: #111111;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.wiki-link:hover {
+  background: #f7f6f3;
+}
+
+.editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 68vh;
+  resize: vertical;
+  border: 1px solid #deddda;
+  border-radius: 4px;
+  padding: 18px;
+  color: #1f1f1f;
+  background: #ffffff;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.editor textarea:focus {
+  border-color: #9b9a97;
+  outline: none;
+}
+
+.preview-card {
+  position: absolute;
+  z-index: 10;
+  width: min(320px, calc(100vw - 32px));
+  border: 1px solid #deddda;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 15, 15, 0.12);
+  padding: 14px 16px;
+}
+
+.preview-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #111111;
+  font-size: 15px;
+}
+
+.preview-card p {
+  margin: 0;
+  color: #5f5e5b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    width: min(100% - 32px, 760px);
+    padding-top: 16px;
+  }
+
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 48px;
+  }
+
+  .toolbar-actions {
+    align-self: flex-end;
+  }
+
+  .wiki-page h1 {
+    font-size: 34px;
+  }
+
+  .wiki-page p {
+    font-size: 16px;
+  }
+}
