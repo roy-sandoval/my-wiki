@@ -13,4 +13,4 @@ Goals for when I return to Mexico
 Done on Wednesday, June 3
 - [x] I want to update this thing to support callouts in a sense where I leave notes for myself and it be visually obvious its a note to self
 
-testing inline
+testing {{note inline | new}}
