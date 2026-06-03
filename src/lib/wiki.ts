@@ -247,39 +247,12 @@ function renderYoutubeEmbed(value: string) {
   return `<iframe class="youtube-embed" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen frameborder="0" loading="lazy" sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation" src="${escapeHtml(embedSrc)}"></iframe>`;
 }
 
-function renderNoteParagraphs(value: string, pagesBySlug: Map<string, WikiPage>) {
-  return value
-    .split(/\n{2,}/)
-    .map((paragraph) =>
-      paragraph
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .join(" "),
-    )
-    .filter(Boolean)
-    .map((paragraph) => `<p>${renderInline(paragraph, pagesBySlug)}</p>`)
-    .join("\n");
-}
-
-function renderNote(value: string, pagesBySlug: Map<string, WikiPage>) {
-  const noteHtml = renderNoteParagraphs(value, pagesBySlug);
-
-  if (!noteHtml) {
-    return null;
-  }
-
-  return `<aside class="self-note" aria-label="Note to self">${noteHtml}</aside>`;
-}
-
 export function excerptFromMarkdown(markdown: string) {
   return markdown
     .replace(/^#\s+.+$/gm, "")
     .replace(/^\{\{apple-music\s+.+?\s*\}\}$/gm, "")
     .replace(/^\{\{youtube\s+.+?\s*\}\}$/gm, "")
     .replace(/\{\{note\s+([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}/g, "$1")
-    .replace(/^\{\{note\s+(.+?)\s*\}\}$/gm, "$1")
-    .replace(/^\{\{note\s*\n([\s\S]*?)\n\}\}$/gm, "$1")
     .replace(/\[\[([^\]]+)\]\]/g, "$1")
     .replace(/[{}*_`>#-]/g, "")
     .split(/\n+/)
@@ -361,38 +334,6 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
       flushList();
       html.push(youtubeEmbed);
       continue;
-    }
-
-    const inlineNote = trimmed.match(/^\{\{note\s+(.+?)\s*\}\}$/);
-    if (inlineNote) {
-      flushParagraph();
-      flushList();
-      const note = renderNote(inlineNote[1], pagesBySlug);
-      if (note) html.push(note);
-      continue;
-    }
-
-    if (trimmed === "{{note") {
-      const noteLines: string[] = [];
-      let closingLineIndex = -1;
-
-      for (let nextLineIndex = lineIndex + 1; nextLineIndex < lines.length; nextLineIndex += 1) {
-        if (lines[nextLineIndex].trim() === "}}") {
-          closingLineIndex = nextLineIndex;
-          break;
-        }
-
-        noteLines.push(lines[nextLineIndex]);
-      }
-
-      if (closingLineIndex > -1) {
-        flushParagraph();
-        flushList();
-        const note = renderNote(noteLines.join("\n"), pagesBySlug);
-        if (note) html.push(note);
-        lines.splice(lineIndex + 1, closingLineIndex - lineIndex);
-        continue;
-      }
     }
 
     const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
