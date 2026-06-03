@@ -8,7 +8,7 @@ So now
 
 
 At the airport
-- [x] me this more how I envision it and adding more notes
+- [ ] me this more how I envision it and adding more notes
 
 {{note
 Remember to connect this idea back to [[Rap]].
