@@ -1,6 +1,6 @@
 So now
 
-- [ ] I want to update this thing to support callouts in a sense where I leave notes for myself and it be visually obvious its a note to self
+- [x] I want to update this thing to support callouts in a sense where I leave notes for myself and it be visually obvious its a note to self
 - [ ] read the creative act
 - [ ] poster
 - [ ] outline
