@@ -8,5 +8,4 @@ So now
 
 
 At the airport
-1. bug fixes from sentry and transfer sentry web to wh
-2. after workhorse I can work on this project making it more how I envision it and adding more notes
+1. me this more how I envision it and adding more notes
