@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -9,6 +9,8 @@ export type WikiPage = {
   slug: string;
   markdown: string;
   exists: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export function slugifyTitle(title: string) {
@@ -69,11 +71,15 @@ export function readPage(slugInput: string): WikiPage {
   }
 
   const markdown = readFileSync(filePath, "utf8");
+  const stats = statSync(filePath);
+
   return {
     title: extractTitle(markdown, fallbackTitle),
     slug,
     markdown,
     exists: true,
+    createdAt: stats.birthtime,
+    updatedAt: stats.mtime,
   };
 }
 
@@ -84,7 +90,8 @@ export function readAllPages() {
 
   return readdirSync(pagesDir)
     .filter((file) => file.endsWith(".md"))
-    .map((file) => readPage(file.replace(/\.md$/, "")));
+    .map((file) => readPage(file.replace(/\.md$/, "")))
+    .sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
 }
 
 export async function writePage(slugInput: string, markdown: string) {

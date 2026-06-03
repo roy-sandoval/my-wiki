@@ -1,3 +1,68 @@
 ---
-return Astro.redirect("/rap");
+import "../styles/global.css";
+import { readAllPages } from "@/lib/wiki";
+
+const pages = readAllPages();
+const dateFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+const formatDate = (date?: Date) => (date ? dateFormatter.format(date) : "Unknown");
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const relativeTimeUnits = [
+  { unit: "year", seconds: 60 * 60 * 24 * 365 },
+  { unit: "month", seconds: 60 * 60 * 24 * 30 },
+  { unit: "week", seconds: 60 * 60 * 24 * 7 },
+  { unit: "day", seconds: 60 * 60 * 24 },
+  { unit: "hour", seconds: 60 * 60 },
+  { unit: "minute", seconds: 60 },
+] as const;
+
+const formatRelativeDate = (date?: Date) => {
+  if (!date) return "Unknown";
+
+  const secondsAgo = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (secondsAgo < 10) return "just now";
+  if (secondsAgo < 60) return relativeTimeFormatter.format(-secondsAgo, "second");
+
+  const unit = relativeTimeUnits.find((item) => secondsAgo >= item.seconds);
+  if (!unit) return "just now";
+
+  return relativeTimeFormatter.format(-Math.floor(secondsAgo / unit.seconds), unit.unit);
+};
 ---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Posts</title>
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="home-header">
+        <h1>Posts</h1>
+      </section>
+
+      <section class="post-list" aria-label="Posts">
+        {pages.map((page) => (
+          <article class="post-list-item">
+            <a href={`/${page.slug}`}>{page.title}</a>
+            <dl>
+              <div>
+                <dt>Created</dt>
+                <dd title={formatDate(page.createdAt)}>{formatRelativeDate(page.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd title={formatDate(page.updatedAt)}>{formatRelativeDate(page.updatedAt)}</dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </section>
+    </main>
+  </body>
+</html>
