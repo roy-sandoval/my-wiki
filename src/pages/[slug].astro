@@ -109,21 +109,43 @@ const isHomePage = page.slug === "rap";
 
       editToggle.addEventListener("click", () => setEditing(!editing));
 
+      function setTaskMarkdownLine(lineIndex, checked) {
+        const lines = textarea.value.replace(/\r\n/g, "\n").split("\n");
+        const line = lines[lineIndex];
+
+        if (typeof line !== "string") {
+          throw new Error("Could not find the todo item in the source Markdown.");
+        }
+
+        lines[lineIndex] = line.replace(/^(\s*[-*+]\s+\[)( |x|X)(\]\s+)/, `$1${checked ? "x" : " "}$3`);
+
+        if (lines[lineIndex] === line) {
+          throw new Error("Could not update the todo item in the source Markdown.");
+        }
+
+        textarea.value = lines.join("\n");
+      }
+
+      async function saveMarkdown(markdown) {
+        const response = await fetch("/api/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug, markdown }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        return response.json();
+      }
+
       saveButton.addEventListener("click", async () => {
         saveButton.disabled = true;
         saveStatus.textContent = "Saving...";
 
         try {
-          const response = await fetch("/api/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slug, markdown: textarea.value }),
-          });
-
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-
+          await saveMarkdown(textarea.value);
           saveStatus.textContent = "Saved";
           window.location.reload();
         } catch (error) {
@@ -131,6 +153,31 @@ const isHomePage = page.slug === "rap";
           console.error(error);
         } finally {
           saveButton.disabled = false;
+        }
+      });
+
+      view.addEventListener("change", async (event) => {
+        const checkbox = event.target;
+        if (!(checkbox instanceof HTMLInputElement) || !checkbox.classList.contains("todo-checkbox")) {
+          return;
+        }
+
+        const previousMarkdown = textarea.value;
+        const previousChecked = !checkbox.checked;
+        checkbox.disabled = true;
+        saveStatus.textContent = "Saving...";
+
+        try {
+          setTaskMarkdownLine(Number(checkbox.dataset.lineIndex), checkbox.checked);
+          await saveMarkdown(textarea.value);
+          saveStatus.textContent = "Saved";
+        } catch (error) {
+          textarea.value = previousMarkdown;
+          checkbox.checked = previousChecked;
+          saveStatus.textContent = "Could not save";
+          console.error(error);
+        } finally {
+          checkbox.disabled = false;
         }
       });
 

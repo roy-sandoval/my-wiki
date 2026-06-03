@@ -245,6 +245,13 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let paragraph: string[] = [];
+  let list:
+    | {
+        type: "ul" | "ol";
+        start?: number;
+        items: string[];
+      }
+    | null = null;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -252,16 +259,36 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
     paragraph = [];
   };
 
-  for (const line of lines) {
+  const flushList = () => {
+    if (!list) return;
+    const startAttribute = list.type === "ol" && list.start && list.start !== 1 ? ` start="${list.start}"` : "";
+    html.push(`<${list.type}${startAttribute}>\n${list.items.join("\n")}\n</${list.type}>`);
+    list = null;
+  };
+
+  const pushListItem = (type: "ul" | "ol", itemHtml: string, start?: number) => {
+    flushParagraph();
+
+    if (!list || list.type !== type) {
+      flushList();
+      list = { type, start, items: [] };
+    }
+
+    list.items.push(itemHtml);
+  };
+
+  for (const [lineIndex, line] of lines.entries()) {
     const trimmed = line.trim();
 
     if (!trimmed) {
       flushParagraph();
+      flushList();
       continue;
     }
 
     if (/^---+$/.test(trimmed)) {
       flushParagraph();
+      flushList();
       html.push("<hr />");
       continue;
     }
@@ -269,6 +296,7 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
     const appleMusicEmbed = renderAppleMusicEmbed(trimmed);
     if (appleMusicEmbed) {
       flushParagraph();
+      flushList();
       html.push(appleMusicEmbed);
       continue;
     }
@@ -276,6 +304,7 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
     const youtubeEmbed = renderYoutubeEmbed(trimmed);
     if (youtubeEmbed) {
       flushParagraph();
+      flushList();
       html.push(youtubeEmbed);
       continue;
     }
@@ -283,6 +312,7 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
     const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
       flushParagraph();
+      flushList();
       const level = heading[1].length;
       html.push(`<h${level}>${renderInline(heading[2], pagesBySlug)}</h${level}>`);
       continue;
@@ -290,13 +320,39 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
 
     if (trimmed.startsWith(">")) {
       flushParagraph();
+      flushList();
       html.push(`<blockquote>${renderInline(trimmed.replace(/^>\s?/, ""), pagesBySlug)}</blockquote>`);
       continue;
     }
 
+    const taskItem = trimmed.match(/^[-*+]\s+\[( |x|X)\]\s+(.+)$/);
+    if (taskItem) {
+      const checked = taskItem[1].toLowerCase() === "x";
+      const checkedAttribute = checked ? " checked" : "";
+      pushListItem(
+        "ul",
+        `<li class="task-list-item"><label><input class="todo-checkbox" type="checkbox" data-line-index="${lineIndex}"${checkedAttribute} /> <span>${renderInline(taskItem[2], pagesBySlug)}</span></label></li>`,
+      );
+      continue;
+    }
+
+    const unorderedItem = trimmed.match(/^[-*+]\s+(.+)$/);
+    if (unorderedItem) {
+      pushListItem("ul", `<li>${renderInline(unorderedItem[1], pagesBySlug)}</li>`);
+      continue;
+    }
+
+    const orderedItem = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
+    if (orderedItem) {
+      pushListItem("ol", `<li>${renderInline(orderedItem[2], pagesBySlug)}</li>`, Number(orderedItem[1]));
+      continue;
+    }
+
+    flushList();
     paragraph.push(trimmed);
   }
 
   flushParagraph();
+  flushList();
   return html.join("\n");
 }

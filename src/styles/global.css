@@ -220,6 +220,56 @@ textarea {
   line-height: 1.68;
 }
 
+.wiki-page ul,
+.wiki-page ol {
+  margin: 0 0 16px;
+  padding-left: 28px;
+  color: #2f2f2f;
+  font-size: 17px;
+  line-height: 1.62;
+}
+
+.wiki-page li {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.wiki-page li::marker {
+  color: #787774;
+}
+
+.wiki-page .task-list-item {
+  list-style: none;
+  margin-left: -28px;
+  padding-left: 0;
+}
+
+.wiki-page .task-list-item label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.wiki-page .todo-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 6px 0 0;
+  accent-color: #37352f;
+  cursor: pointer;
+}
+
+.wiki-page .todo-checkbox:checked + span {
+  color: #787774;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.wiki-page .todo-checkbox:disabled {
+  cursor: wait;
+}
+
 .wiki-page strong {
   color: #111111;
   font-weight: 700;
@@ -484,6 +534,11 @@ textarea {
   }
 
   .wiki-page p {
+    font-size: 16px;
+  }
+
+  .wiki-page ul,
+  .wiki-page ol {
     font-size: 16px;
   }
 }
