@@ -118,8 +118,9 @@ async function commitPage(slug: string, action: "Update" | "Restore", revision?:
 
 export async function savePageVersion(slug: string, markdown: string): Promise<PageSaveResult> {
   return queueGitWrite(async () => {
-    const page = await writePage(slug, markdown);
-    const commit = await commitPage(page.slug, "Update");
+    const savedPage = await writePage(slug, markdown);
+    const commit = await commitPage(savedPage.slug, "Update");
+    const page = readPage(savedPage.slug);
 
     return { page, commit };
   });
@@ -166,8 +167,9 @@ export async function restorePageRevision(slug: string, revision: string): Promi
 
   return queueGitWrite(async () => {
     const version = await readPageRevision(slug, revision);
-    const page = await writePage(version.slug, version.markdown);
-    const commit = await commitPage(page.slug, "Restore", revision);
+    const restoredPage = await writePage(version.slug, version.markdown);
+    const commit = await commitPage(restoredPage.slug, "Restore", revision);
+    const page = readPage(restoredPage.slug);
 
     return { page, commit };
   });

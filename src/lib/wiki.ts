@@ -1,8 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 export const pagesDir = path.join(process.cwd(), "src", "content", "pages");
+const repoRoot = process.cwd();
 
 export type WikiPage = {
   title: string;
@@ -51,6 +53,72 @@ export function pagePathForSlug(slug: string) {
   return filePath;
 }
 
+function repoRelativePath(filePath: string) {
+  const relativePath = path.relative(repoRoot, filePath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Invalid page path.");
+  }
+
+  return relativePath.split(path.sep).join("/");
+}
+
+function parseDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function readGitDates(filePath: string) {
+  try {
+    const relativePath = repoRelativePath(filePath);
+    const output = execFileSync("git", ["log", "--follow", "--format=%aI", "--", relativePath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    const dates = output
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(parseDate)
+      .filter((date): date is Date => Boolean(date));
+
+    return {
+      createdAt: dates.at(-1),
+      updatedAt: dates[0],
+    };
+  } catch {
+    return {};
+  }
+}
+
+function hasUncommittedChanges(filePath: string) {
+  try {
+    const relativePath = repoRelativePath(filePath);
+    const status = execFileSync("git", ["status", "--porcelain", "--", relativePath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    return status.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function readPageDates(filePath: string) {
+  const stats = statSync(filePath);
+  const gitDates = readGitDates(filePath);
+  const hasLocalChanges = hasUncommittedChanges(filePath);
+
+  return {
+    createdAt: gitDates.createdAt || stats.birthtime,
+    updatedAt: hasLocalChanges ? stats.mtime : gitDates.updatedAt || stats.mtime,
+  };
+}
+
 export function extractTitle(markdown: string, fallback: string) {
   const match = markdown.match(/^#\s+(.+)$/m);
   return match?.[1]?.trim() || fallback;
@@ -71,15 +139,15 @@ export function readPage(slugInput: string): WikiPage {
   }
 
   const markdown = readFileSync(filePath, "utf8");
-  const stats = statSync(filePath);
+  const dates = readPageDates(filePath);
 
   return {
     title: extractTitle(markdown, fallbackTitle),
     slug,
     markdown,
     exists: true,
-    createdAt: stats.birthtime,
-    updatedAt: stats.mtime,
+    createdAt: dates.createdAt,
+    updatedAt: dates.updatedAt,
   };
 }
 
