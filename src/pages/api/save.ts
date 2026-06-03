@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { writePage } from "@/lib/wiki";
+import { savePageVersion } from "@/lib/git-history";
 
 export const prerender = false;
 
@@ -11,8 +11,8 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response("Expected slug and markdown.", { status: 400 });
     }
 
-    const page = await writePage(body.slug, body.markdown);
-    return Response.json({ ok: true, page });
+    const result = await savePageVersion(body.slug, body.markdown);
+    return Response.json({ ok: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save page.";
     return new Response(message, { status: 400 });

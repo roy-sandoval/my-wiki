@@ -35,6 +35,7 @@ const isHomePage = page.slug === "rap";
         </nav>
         <div class="toolbar-actions">
           <span class="save-status" data-save-status></span>
+          <button class="text-button" type="button" data-history-toggle>History</button>
           <button class="text-button" type="button" data-edit-toggle>Edit</button>
           <button class="text-button is-primary" type="button" data-save hidden>Save</button>
         </div>
@@ -46,6 +47,29 @@ const isHomePage = page.slug === "rap";
 
       <section class="editor" data-editor hidden>
         <textarea aria-label={`Markdown for ${page.title}`} data-markdown>{page.markdown}</textarea>
+      </section>
+
+      <section class="history-panel" data-history-panel hidden aria-label="Version history">
+        <div class="history-header">
+          <div>
+            <h2>History</h2>
+            <p>Local Git versions for this post.</p>
+          </div>
+          <span class="history-status" data-history-status></span>
+        </div>
+        <div class="history-layout">
+          <ol class="history-list" data-history-list></ol>
+          <article class="history-preview">
+            <header class="history-preview-header">
+              <div>
+                <strong data-history-version-title>Select a version</strong>
+                <span data-history-version-meta>Choose a commit to preview it.</span>
+              </div>
+              <button class="text-button is-primary" type="button" data-history-restore disabled>Restore</button>
+            </header>
+            <div class="wiki-page history-preview-body" data-history-preview></div>
+          </article>
+        </div>
       </section>
     </main>
 
@@ -66,12 +90,20 @@ const isHomePage = page.slug === "rap";
 
     <script define:vars={{ slug: page.slug }}>
       const editToggle = document.querySelector("[data-edit-toggle]");
+      const historyToggle = document.querySelector("[data-history-toggle]");
       const saveButton = document.querySelector("[data-save]");
       const saveStatus = document.querySelector("[data-save-status]");
       const backButton = document.querySelector("[data-back-button]");
       const view = document.querySelector("[data-view]");
       const editor = document.querySelector("[data-editor]");
       const textarea = document.querySelector("[data-markdown]");
+      const historyPanel = document.querySelector("[data-history-panel]");
+      const historyStatus = document.querySelector("[data-history-status]");
+      const historyList = document.querySelector("[data-history-list]");
+      const historyPreview = document.querySelector("[data-history-preview]");
+      const historyVersionTitle = document.querySelector("[data-history-version-title]");
+      const historyVersionMeta = document.querySelector("[data-history-version-meta]");
+      const historyRestore = document.querySelector("[data-history-restore]");
       const previewCard = document.querySelector("[data-preview-card]");
       const previewTitle = previewCard.querySelector("[data-preview-title]");
       const previewBody = previewCard.querySelector("[data-preview-body]");
@@ -81,8 +113,15 @@ const isHomePage = page.slug === "rap";
       const previewYoutubeLoading = previewCard.querySelector("[data-preview-youtube-loading]");
       const appleMusicFrames = new Map();
       const youtubeFrames = new Map();
+      const historyCommits = new Map();
+      const historyDateFormatter = new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
 
       let editing = false;
+      let historyLoaded = false;
+      let selectedHistoryRevision = "";
       let previewHideTimer;
 
       backButton.addEventListener("click", () => {
@@ -104,10 +143,152 @@ const isHomePage = page.slug === "rap";
         saveButton.hidden = !editing;
         editToggle.textContent = editing ? "Cancel" : "Edit";
         saveStatus.textContent = "";
+        if (editing) {
+          historyPanel.hidden = true;
+          historyToggle.classList.remove("is-active");
+        }
         if (editing) textarea.focus();
       }
 
       editToggle.addEventListener("click", () => setEditing(!editing));
+
+      function formatHistoryDate(value) {
+        return historyDateFormatter.format(new Date(value));
+      }
+
+      function setHistoryStatus(message) {
+        historyStatus.textContent = message;
+      }
+
+      async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        return response.json();
+      }
+
+      function setHistorySelection(revision) {
+        selectedHistoryRevision = revision;
+        historyList.querySelectorAll("[data-history-revision]").forEach((button) => {
+          button.classList.toggle("is-selected", button.dataset.historyRevision === revision);
+        });
+      }
+
+      async function selectHistoryRevision(revision) {
+        const commit = historyCommits.get(revision);
+        if (!commit) return;
+
+        setHistorySelection(revision);
+        setHistoryStatus("Loading version...");
+        historyRestore.disabled = true;
+        historyVersionTitle.textContent = commit.subject || commit.shortHash;
+        historyVersionMeta.textContent = `${commit.shortHash} · ${formatHistoryDate(commit.authorDate)}`;
+
+        try {
+          const data = await fetchJson(`/api/history/version?slug=${encodeURIComponent(slug)}&revision=${encodeURIComponent(revision)}`);
+          historyPreview.innerHTML = data.version.html;
+          historyRestore.disabled = false;
+          setHistoryStatus("");
+        } catch (error) {
+          historyPreview.textContent = "";
+          setHistoryStatus("Could not load version");
+          console.error(error);
+        }
+      }
+
+      function renderHistory(commits) {
+        historyList.innerHTML = "";
+        historyCommits.clear();
+
+        if (commits.length === 0) {
+          const emptyItem = document.createElement("li");
+          emptyItem.className = "history-empty";
+          emptyItem.textContent = "No committed versions yet.";
+          historyList.append(emptyItem);
+          return;
+        }
+
+        commits.forEach((commit) => {
+          historyCommits.set(commit.hash, commit);
+
+          const item = document.createElement("li");
+          const button = document.createElement("button");
+          const subject = document.createElement("strong");
+          const meta = document.createElement("span");
+
+          button.type = "button";
+          button.dataset.historyRevision = commit.hash;
+          subject.textContent = commit.subject || commit.shortHash;
+          meta.textContent = `${commit.shortHash} · ${formatHistoryDate(commit.authorDate)}`;
+
+          button.append(subject, meta);
+          item.append(button);
+          historyList.append(item);
+        });
+      }
+
+      async function loadHistory() {
+        setHistoryStatus("Loading history...");
+
+        try {
+          const data = await fetchJson(`/api/history?slug=${encodeURIComponent(slug)}`);
+          renderHistory(data.commits);
+          historyLoaded = true;
+          setHistoryStatus("");
+
+          if (data.commits.length > 0) {
+            await selectHistoryRevision(data.commits[0].hash);
+          }
+        } catch (error) {
+          setHistoryStatus("Could not load history");
+          console.error(error);
+        }
+      }
+
+      historyToggle.addEventListener("click", async () => {
+        const opening = historyPanel.hidden;
+        historyPanel.hidden = !opening;
+        historyToggle.classList.toggle("is-active", opening);
+
+        if (opening) {
+          if (editing) setEditing(false);
+          if (!historyLoaded) {
+            await loadHistory();
+          }
+        }
+      });
+
+      historyList.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-history-revision]");
+        if (!button) return;
+        await selectHistoryRevision(button.dataset.historyRevision);
+      });
+
+      historyRestore.addEventListener("click", async () => {
+        if (!selectedHistoryRevision) return;
+
+        const confirmed = window.confirm("Restore this version? The restored content will be saved as a new version.");
+        if (!confirmed) return;
+
+        historyRestore.disabled = true;
+        setHistoryStatus("Restoring...");
+
+        try {
+          await fetchJson("/api/history/restore", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slug, revision: selectedHistoryRevision }),
+          });
+          window.location.reload();
+        } catch (error) {
+          setHistoryStatus("Could not restore");
+          historyRestore.disabled = false;
+          console.error(error);
+        }
+      });
 
       function setTaskMarkdownLine(lineIndex, checked) {
         const lines = textarea.value.replace(/\r\n/g, "\n").split("\n");
