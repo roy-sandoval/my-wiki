@@ -110,7 +110,7 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
-function renderInline(value: string, pagesBySlug: Map<string, WikiPage>) {
+function renderInlinePlain(value: string, pagesBySlug: Map<string, WikiPage>) {
   const escaped = escapeHtml(value);
 
   return escaped
@@ -136,6 +136,28 @@ function renderInline(value: string, pagesBySlug: Map<string, WikiPage>) {
 
       return `<a class="wiki-link" href="/${slug}" data-preview-title="${escapeHtml(title)}" data-preview="${escapeHtml(preview)}"${appleMusicAttribute}${youtubeAttribute}>${escapeHtml(title)}</a>`;
     });
+}
+
+function renderInline(value: string, pagesBySlug: Map<string, WikiPage>) {
+  const notePattern = /\{\{note\s+([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}/g;
+  const html: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = notePattern.exec(value)) !== null) {
+    const [source, rawText, rawNote] = match;
+    const noteText = rawText.trim();
+    const noteBody = rawNote.trim();
+
+    html.push(renderInlinePlain(value.slice(lastIndex, match.index), pagesBySlug));
+    html.push(
+      `<span class="inline-note" role="button" tabindex="0" aria-label="Note: ${escapeHtml(noteBody)}" data-note-text="${escapeHtml(noteText)}" data-note-body="${escapeHtml(noteBody)}" data-note-source="${escapeHtml(source)}">${renderInlinePlain(noteText, pagesBySlug)}</span>`,
+    );
+    lastIndex = notePattern.lastIndex;
+  }
+
+  html.push(renderInlinePlain(value.slice(lastIndex), pagesBySlug));
+  return html.join("");
 }
 
 function appleMusicEmbedSrc(value: string) {
@@ -225,13 +247,41 @@ function renderYoutubeEmbed(value: string) {
   return `<iframe class="youtube-embed" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen frameborder="0" loading="lazy" sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation" src="${escapeHtml(embedSrc)}"></iframe>`;
 }
 
+function renderNoteParagraphs(value: string, pagesBySlug: Map<string, WikiPage>) {
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) =>
+      paragraph
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join(" "),
+    )
+    .filter(Boolean)
+    .map((paragraph) => `<p>${renderInline(paragraph, pagesBySlug)}</p>`)
+    .join("\n");
+}
+
+function renderNote(value: string, pagesBySlug: Map<string, WikiPage>) {
+  const noteHtml = renderNoteParagraphs(value, pagesBySlug);
+
+  if (!noteHtml) {
+    return null;
+  }
+
+  return `<aside class="self-note" aria-label="Note to self">${noteHtml}</aside>`;
+}
+
 export function excerptFromMarkdown(markdown: string) {
   return markdown
     .replace(/^#\s+.+$/gm, "")
     .replace(/^\{\{apple-music\s+.+?\s*\}\}$/gm, "")
     .replace(/^\{\{youtube\s+.+?\s*\}\}$/gm, "")
+    .replace(/\{\{note\s+([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}/g, "$1")
+    .replace(/^\{\{note\s+(.+?)\s*\}\}$/gm, "$1")
+    .replace(/^\{\{note\s*\n([\s\S]*?)\n\}\}$/gm, "$1")
     .replace(/\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/[*_`>#-]/g, "")
+    .replace(/[{}*_`>#-]/g, "")
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -245,6 +295,7 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let paragraph: string[] = [];
+  let paragraphStartLineIndex: number | null = null;
   let list:
     | {
         type: "ul" | "ol";
@@ -255,8 +306,11 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
-    html.push(`<p>${renderInline(paragraph.join(" "), pagesBySlug)}</p>`);
+    const sourceAttribute =
+      paragraphStartLineIndex === null ? "" : ` data-source-line-index="${paragraphStartLineIndex}"`;
+    html.push(`<p${sourceAttribute}>${renderInline(paragraph.join(" "), pagesBySlug)}</p>`);
     paragraph = [];
+    paragraphStartLineIndex = null;
   };
 
   const flushList = () => {
@@ -309,19 +363,53 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
       continue;
     }
 
+    const inlineNote = trimmed.match(/^\{\{note\s+(.+?)\s*\}\}$/);
+    if (inlineNote) {
+      flushParagraph();
+      flushList();
+      const note = renderNote(inlineNote[1], pagesBySlug);
+      if (note) html.push(note);
+      continue;
+    }
+
+    if (trimmed === "{{note") {
+      const noteLines: string[] = [];
+      let closingLineIndex = -1;
+
+      for (let nextLineIndex = lineIndex + 1; nextLineIndex < lines.length; nextLineIndex += 1) {
+        if (lines[nextLineIndex].trim() === "}}") {
+          closingLineIndex = nextLineIndex;
+          break;
+        }
+
+        noteLines.push(lines[nextLineIndex]);
+      }
+
+      if (closingLineIndex > -1) {
+        flushParagraph();
+        flushList();
+        const note = renderNote(noteLines.join("\n"), pagesBySlug);
+        if (note) html.push(note);
+        lines.splice(lineIndex + 1, closingLineIndex - lineIndex);
+        continue;
+      }
+    }
+
     const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
       flushParagraph();
       flushList();
       const level = heading[1].length;
-      html.push(`<h${level}>${renderInline(heading[2], pagesBySlug)}</h${level}>`);
+      html.push(`<h${level} data-source-line-index="${lineIndex}">${renderInline(heading[2], pagesBySlug)}</h${level}>`);
       continue;
     }
 
     if (trimmed.startsWith(">")) {
       flushParagraph();
       flushList();
-      html.push(`<blockquote>${renderInline(trimmed.replace(/^>\s?/, ""), pagesBySlug)}</blockquote>`);
+      html.push(
+        `<blockquote data-source-line-index="${lineIndex}">${renderInline(trimmed.replace(/^>\s?/, ""), pagesBySlug)}</blockquote>`,
+      );
       continue;
     }
 
@@ -331,24 +419,25 @@ export function renderMarkdown(markdown: string, pages: WikiPage[]) {
       const checkedAttribute = checked ? " checked" : "";
       pushListItem(
         "ul",
-        `<li class="task-list-item"><label><input class="todo-checkbox" type="checkbox" data-line-index="${lineIndex}"${checkedAttribute} /> <span>${renderInline(taskItem[2], pagesBySlug)}</span></label></li>`,
+        `<li class="task-list-item" data-source-line-index="${lineIndex}"><label><input class="todo-checkbox" type="checkbox" data-line-index="${lineIndex}"${checkedAttribute} /> <span>${renderInline(taskItem[2], pagesBySlug)}</span></label></li>`,
       );
       continue;
     }
 
     const unorderedItem = trimmed.match(/^[-*+]\s+(.+)$/);
     if (unorderedItem) {
-      pushListItem("ul", `<li>${renderInline(unorderedItem[1], pagesBySlug)}</li>`);
+      pushListItem("ul", `<li data-source-line-index="${lineIndex}">${renderInline(unorderedItem[1], pagesBySlug)}</li>`);
       continue;
     }
 
     const orderedItem = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
     if (orderedItem) {
-      pushListItem("ol", `<li>${renderInline(orderedItem[2], pagesBySlug)}</li>`, Number(orderedItem[1]));
+      pushListItem("ol", `<li data-source-line-index="${lineIndex}">${renderInline(orderedItem[2], pagesBySlug)}</li>`, Number(orderedItem[1]));
       continue;
     }
 
     flushList();
+    paragraphStartLineIndex ??= lineIndex;
     paragraph.push(trimmed);
   }
 
